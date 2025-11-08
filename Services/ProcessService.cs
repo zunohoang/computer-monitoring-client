@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Management; // Để lấy Parent Process ID
 using ComputerMonitoringClient.Models;
 using System.Collections.Concurrent;
 using System.Threading;
@@ -109,6 +110,7 @@ namespace ComputerMonitoringClient.Services
                 var process = new Dtos.Proccess
                 {
                     Pid = proc.Id,
+                    ParentPid = GetParentProcessIdSafe(proc), // Thêm Parent Process ID
                     Name = proc.ProcessName ?? "Unknown",
                     StartTime = GetProcessStartTimeSafe(proc),
                     Status = Dtos.Proccess.ProcessStatus.Running
@@ -419,6 +421,23 @@ namespace ComputerMonitoringClient.Services
             catch
             {
                 return 0;
+            }
+        }
+
+        private int? GetParentProcessIdSafe(Process proc)
+        {
+            try
+            {
+                // Sử dụng WMI để lấy Parent Process ID
+                using (var mo = new System.Management.ManagementObject($"win32_process.handle='{proc.Id}'"))
+                {
+                    mo.Get();
+                    return Convert.ToInt32(mo["ParentProcessId"]);
+                }
+            }
+            catch
+            {
+                return null; // Không lấy được parent PID
             }
         }
 

@@ -5,6 +5,7 @@ using AntdUI;
 using ComputerMonitoringClient.Services;
 using ComputerMonitoringClient.Models;
 using ComputerMonitoringClient.Utils;
+using Microsoft.Extensions.Logging;
 
 namespace ComputerMonitoringClient.Views
 {
@@ -14,24 +15,30 @@ namespace ComputerMonitoringClient.Views
         private readonly MonitoringService monitoringService;
         private readonly DeviceService deviceService;
         private readonly ProcessService processService; // Add ProcessService
+        private readonly MonitoringHubClient hubClient; // Add SignalR hub client
         private ExamSession currentSession;
 
-        private System.Windows.Forms.Panel headerPanel;
-        private AntdUI.Label lblHeader;
-        private AntdUI.Label lblExamInfo;
-        private AntdUI.Label lblRoomInfo;
-        private AntdUI.Label lblLocationInfo; // New location label
-        private AntdUI.Label lblStatus;
-        private AntdUI.Panel contentPanel;
-        private RichTextBox txtMonitorLog;
-        private AntdUI.Button btnStartMonitoring;
-        private AntdUI.Button btnStopMonitoring;
-        private AntdUI.Button btnLogout;
-        private AntdUI.Button btnReport;
-        private AntdUI.Button btnSettings;
-        private AntdUI.Button btnAbout;
-        private AntdUI.Button btnDeviceInfo;
-        private System.Windows.Forms.Timer monitoringTimer;
+        // Track previous process state for detecting changes
+        private Dictionary<int, string> previousProcessStatuses = new Dictionary<int, string>();
+        private HashSet<int> previousProcessPids = new HashSet<int>();
+
+        private System.Windows.Forms.Panel headerPanel = null!;
+        private AntdUI.Label lblHeader = null!;
+        private AntdUI.Label lblExamInfo = null!;
+        private AntdUI.Label lblRoomInfo = null!;
+        private AntdUI.Label lblLocationInfo = null!; // New location label
+        private AntdUI.Label lblStatus = null!;
+        private AntdUI.Panel contentPanel = null!;
+        private RichTextBox txtMonitorLog = null!;
+        private AntdUI.Button btnStartMonitoring = null!;
+        private AntdUI.Button btnStopMonitoring = null!;
+        private AntdUI.Button btnLogout = null!;
+        private AntdUI.Button btnReport = null!;
+        private AntdUI.Button btnSettings = null!;
+        private AntdUI.Button btnAbout = null!;
+        private AntdUI.Button btnDeviceInfo = null!;
+        private System.Windows.Forms.Timer monitoringTimer = null!;
+        private System.Windows.Forms.Timer dataUploadTimer = null!; // Timer for uploading data to server
 
         public MonitoringForm()
         {
@@ -39,9 +46,11 @@ namespace ComputerMonitoringClient.Views
             monitoringService = MonitoringService.Instance;
             deviceService = DeviceService.Instance;
             processService = ProcessService.Instance; // Initialize ProcessService
+            hubClient = MonitoringHubClient.Instance; // Get SignalR hub client instance
             currentSession = authService.CurrentSession;
             
             InitializeComponent();
+            SetupSignalREvents(); // Setup SignalR event handlers
         }
 
         private void InitializeComponent()
@@ -296,15 +305,28 @@ namespace ComputerMonitoringClient.Views
             monitoringTimer.Interval = Constants.Timer.MonitoringInterval;
             monitoringTimer.Tick += MonitoringTimer_Tick;
 
+            // Data Upload Timer - Send data to server every 30 seconds
+            dataUploadTimer = new System.Windows.Forms.Timer();
+            dataUploadTimer.Interval = 30000; // 30 seconds
+            dataUploadTimer.Tick += DataUploadTimer_Tick;
+            dataUploadTimer.Start(); // Start automatically when form loads
+
             // Add initial logs including device info
             AddLogToUI(new MonitoringLog(LogType.Info, "Hệ thống sẵn sàng."));
             AddLogToUI(new MonitoringLog(LogType.Info, $"Thông tin phiên: {currentSession}"));
-            AddDeviceInfoToLog();
-            AddLocationInfoToLog();
-            AddProcessInfoToLog(); // Add process info to initial logs
+            
+            // Load device and location info asynchronously to avoid blocking UI
+            LoadDeviceInfoAsync();
+            LoadLocationInfoAsync();
+            
+            // Comment out process info to avoid lag on startup
+            // AddProcessInfoToLog(); // Add process info to initial logs
+            
+            // Register attempt with SignalR
+            RegisterAttemptWithServer();
         }
 
-        private void BtnStartMonitoring_Click(object sender, EventArgs e)
+        private void BtnStartMonitoring_Click(object? sender, EventArgs e)
         {
             monitoringService.StartMonitoring();
             
@@ -320,7 +342,7 @@ namespace ComputerMonitoringClient.Views
                 AntdUI.TAlignFrom.BR, Font);
         }
 
-        private void BtnStopMonitoring_Click(object sender, EventArgs e)
+        private void BtnStopMonitoring_Click(object? sender, EventArgs e)
         {
             monitoringService.StopMonitoring();
             
@@ -336,7 +358,7 @@ namespace ComputerMonitoringClient.Views
                 AntdUI.TAlignFrom.BR, Font);
         }
 
-        private void MonitoringTimer_Tick(object sender, EventArgs e)
+        private void MonitoringTimer_Tick(object? sender, EventArgs e)
         {
             // Sử dụng MonitoringService để thực hiện kiểm tra
             var log = monitoringService.PerformMonitoringCheck();
@@ -346,7 +368,7 @@ namespace ComputerMonitoringClient.Views
             }
         }
 
-        private void BtnSettings_Click(object sender, EventArgs e)
+        private void BtnSettings_Click(object? sender, EventArgs e)
         {
             // Show settings form with performance test option
             var result = AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Tùy chọn", "Chọn hành động:\n\n1. Mở cài đặt\n2. Kiểm tra hiệu suất hệ thống")
@@ -409,19 +431,19 @@ namespace ComputerMonitoringClient.Views
             }
         }
 
-        private void BtnReport_Click(object sender, EventArgs e)
+        private void BtnReport_Click(object? sender, EventArgs e)
         {
             ReportForm reportForm = new ReportForm();
             reportForm.ShowDialog();
         }
 
-        private void BtnAbout_Click(object sender, EventArgs e)
+        private void BtnAbout_Click(object? sender, EventArgs e)
         {
             AboutForm aboutForm = new AboutForm();
             aboutForm.ShowDialog();
         }
 
-        private void BtnLogout_Click(object sender, EventArgs e)
+        private void BtnLogout_Click(object? sender, EventArgs e)
         {
             var result = AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Xác nhận", Constants.Messages.LogoutConfirm)
             {
@@ -443,12 +465,12 @@ namespace ComputerMonitoringClient.Views
             }
         }
 
-        private void BtnDeviceInfo_Click(object sender, EventArgs e)
+        private void BtnDeviceInfo_Click(object? sender, EventArgs e)
         {
             ShowDeviceInfoDialog();
         }
 
-        private void BtnShowDeviceInfo_Click(object sender, EventArgs e)
+        private void BtnShowDeviceInfo_Click(object? sender, EventArgs e)
         {
             AddDeviceInfoToLog();
         }
@@ -478,7 +500,7 @@ namespace ComputerMonitoringClient.Views
             }
         }
 
-        private void BtnShowProcessInfo_Click(object sender, EventArgs e)
+        private void BtnShowProcessInfo_Click(object? sender, EventArgs e)
         {
             // Open dedicated Process Monitoring Form
             ProcessMonitoringForm processForm = new ProcessMonitoringForm();
@@ -526,9 +548,31 @@ namespace ComputerMonitoringClient.Views
             }
         }
 
-        private void BtnShowLocation_Click(object sender, EventArgs e)
+        private void BtnShowLocation_Click(object? sender, EventArgs e)
         {
             ShowLocationCoordinatesDialog();
+        }
+
+        private async void LoadDeviceInfoAsync()
+        {
+            try
+            {
+                // Run device info loading in background to avoid blocking UI
+                await System.Threading.Tasks.Task.Run(() =>
+                {
+                    string deviceInfo = deviceService.GetDeviceInfo();
+                    
+                    // Update UI on main thread
+                    this.Invoke(new Action(() =>
+                    {
+                        AddLogToUI(new MonitoringLog(LogType.Info, "Thông tin thiết bị:", deviceInfo.Trim()));
+                    }));
+                });
+            }
+            catch (Exception ex)
+            {
+                AddLogToUI(new MonitoringLog(LogType.Error, "Lỗi khi lấy thông tin thiết bị", ex.Message));
+            }
         }
 
         private async void LoadLocationInfoAsync()
@@ -546,6 +590,10 @@ namespace ComputerMonitoringClient.Views
                         if (locationData != null)
                         {
                             lblLocationInfo.Text = $"Vị trí: {locationData.GetFullLocationString()} | Tọa độ: {locationData.GetCoordinatesString()}";
+                            
+                            // Also add to log
+                            string locationLog = $"Vị trí: {locationData.GetFullLocationString()} - Tọa độ: {locationData.GetCoordinatesString()}";
+                            AddLogToUI(new MonitoringLog(LogType.Info, "Thông tin vị trí:", locationLog));
                         }
                         else
                         {
@@ -556,7 +604,17 @@ namespace ComputerMonitoringClient.Views
             }
             catch (Exception ex)
             {
-                lblLocationInfo.Text = $"Lỗi vị trí: {ex.Message}";
+                if (this.InvokeRequired)
+                {
+                    this.Invoke(new Action(() =>
+                    {
+                        lblLocationInfo.Text = $"Lỗi vị trí: {ex.Message}";
+                    }));
+                }
+                else
+                {
+                    lblLocationInfo.Text = $"Lỗi vị trí: {ex.Message}";
+                }
             }
         }
 
@@ -661,8 +719,384 @@ namespace ComputerMonitoringClient.Views
             txtMonitorLog.ScrollToCaret();
         }
 
+        /// <summary>
+        /// Setup SignalR event handlers to receive status updates from server
+        /// </summary>
+        private void SetupSignalREvents()
+        {
+            if (hubClient == null)
+            {
+                AddLogToUI(new MonitoringLog(LogType.Warning, "SignalR hub client không khả dụng"));
+                return;
+            }
+
+            // Subscribe to attempt status updates
+            hubClient.OnAttemptStatusUpdated += HandleAttemptStatusUpdate;
+            hubClient.OnStatusUpdated += HandleSimpleStatusUpdate;
+            hubClient.OnError += HandleSignalRError;
+            hubClient.OnDisconnected += HandleSignalRDisconnected;
+
+            AddLogToUI(new MonitoringLog(LogType.Info, "Đã đăng ký nhận cập nhật trạng thái từ server"));
+        }
+
+        /// <summary>
+        /// Handle detailed attempt status updates from SignalR
+        /// </summary>
+        private void HandleAttemptStatusUpdate(Dtos.AttemptStatusUpdateDto update)
+        {
+            // Make sure we update UI on the UI thread
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(() => HandleAttemptStatusUpdate(update)));
+                return;
+            }
+
+            AddLogToUI(new MonitoringLog(LogType.Info, 
+                $"Cập nhật trạng thái: {update.status}", 
+                $"AttemptId: {update.attemptId}, Thời gian: {update.timestamp.ToLocalTime():HH:mm:ss}"));
+
+            // Update status based on received status
+            switch (update.status.ToLower())
+            {
+                case "started":
+                    lblStatus.Text = "Trạng thái: Đã bắt đầu thi";
+                    lblStatus.ForeColor = Constants.Colors.ReadableSuccess;
+                    
+                    AntdUI.Notification.info(this, "Bắt đầu thi",
+                        $"Bài thi đã được bắt đầu lúc {update.timestamp.ToLocalTime():HH:mm:ss}",
+                        AntdUI.TAlignFrom.BR, Font);
+                    break;
+
+                case "ended":
+                    lblStatus.Text = "Trạng thái: Đã kết thúc thi";
+                    lblStatus.ForeColor = Constants.Colors.ReadableError;
+                    
+                    // Stop monitoring if running
+                    if (monitoringService.IsMonitoring)
+                    {
+                        monitoringService.StopMonitoring();
+                        monitoringTimer.Stop();
+                        btnStartMonitoring.Enabled = false;
+                        btnStopMonitoring.Enabled = false;
+                    }
+                    
+                    AntdUI.Notification.warn(this, "Kết thúc thi",
+                        $"Bài thi đã kết thúc lúc {update.timestamp.ToLocalTime():HH:mm:ss}",
+                        AntdUI.TAlignFrom.BR, Font);
+                    break;
+
+                case "approved":
+                    lblStatus.Text = "Trạng thái: Đã phê duyệt";
+                    lblStatus.ForeColor = Constants.Colors.ReadableSuccess;
+                    break;
+
+                case "rejected":
+                    lblStatus.Text = "Trạng thái: Bị từ chối";
+                    lblStatus.ForeColor = Constants.Colors.ReadableError;
+                    
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Bị từ chối",
+                        "Bạn đã bị từ chối tham gia bài thi. Vui lòng liên hệ giám thị.")
+                    {
+                        Icon = AntdUI.TType.Error,
+                        OkText = "Đóng",
+                        OnOk = (config) =>
+                        {
+                            this.Close();
+                            return true;
+                        }
+                    });
+                    break;
+
+                case "pending":
+                    lblStatus.Text = "Trạng thái: Đang chờ phê duyệt";
+                    lblStatus.ForeColor = Constants.Colors.Warning;
+                    break;
+
+                default:
+                    lblStatus.Text = $"Trạng thái: {update.status}";
+                    lblStatus.ForeColor = Constants.Colors.ReadableGray;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Handle simple status updates (backward compatible)
+        /// </summary>
+        private void HandleSimpleStatusUpdate(string status)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(() => HandleSimpleStatusUpdate(status)));
+                return;
+            }
+
+            AddLogToUI(new MonitoringLog(LogType.Info, $"Cập nhật trạng thái đơn giản: {status}"));
+        }
+
+        /// <summary>
+        /// Handle SignalR errors
+        /// </summary>
+        private void HandleSignalRError(string error)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(() => HandleSignalRError(error)));
+                return;
+            }
+
+            AddLogToUI(new MonitoringLog(LogType.Error, "Lỗi SignalR", error));
+        }
+
+        /// <summary>
+        /// Handle SignalR disconnection
+        /// </summary>
+        private void HandleSignalRDisconnected(Exception ex)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(() => HandleSignalRDisconnected(ex)));
+                return;
+            }
+
+            AddLogToUI(new MonitoringLog(LogType.Warning, 
+                "Mất kết nối SignalR", 
+                ex?.Message ?? "Kết nối bị ngắt"));
+        }
+
+        /// <summary>
+        /// Cleanup SignalR event handlers
+        /// </summary>
+        private void CleanupSignalREvents()
+        {
+            if (hubClient != null)
+            {
+                hubClient.OnAttemptStatusUpdated -= HandleAttemptStatusUpdate;
+                hubClient.OnStatusUpdated -= HandleSimpleStatusUpdate;
+                hubClient.OnError -= HandleSignalRError;
+                hubClient.OnDisconnected -= HandleSignalRDisconnected;
+                
+                AddLogToUI(new MonitoringLog(LogType.Info, "Đã hủy đăng ký nhận cập nhật từ server"));
+            }
+        }
+
+        /// <summary>
+        /// Register attempt with server via SignalR
+        /// </summary>
+        private async void RegisterAttemptWithServer()
+        {
+            try
+            {
+                Console.WriteLine($"[RegisterAttempt] Starting registration - AttemptId: {hubClient?.CurrentAttemptId}, IsConnected: {hubClient?.IsConnected}");
+                
+                if (hubClient?.CurrentAttemptId == null)
+                {
+                    Console.WriteLine("[RegisterAttempt] ERROR: No attemptId to register");
+                    AddLogToUI(new MonitoringLog(LogType.Warning, "Không có attemptId để đăng ký"));
+                    return;
+                }
+
+                var deviceId = Environment.MachineName;
+                var deviceName = deviceService.GetDeviceInfo().Split('\n')[0]; // First line usually has device name
+                var ipAddress = deviceService.GetPublicIP();
+
+                Console.WriteLine($"[RegisterAttempt] Registering with - DeviceId: {deviceId}, IP: {ipAddress}");
+                
+                await hubClient.RegisterAttemptAsync(
+                    hubClient.CurrentAttemptId.Value,
+                    deviceId,
+                    deviceName,
+                    ipAddress
+                );
+
+                Console.WriteLine("[RegisterAttempt] Registration successful!");
+                AddLogToUI(new MonitoringLog(LogType.Success, 
+                    "Đã đăng ký thiết bị với server", 
+                    $"AttemptId: {hubClient.CurrentAttemptId}, Device: {deviceId}"));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[RegisterAttempt] ERROR: {ex.Message}");
+                Console.WriteLine($"[RegisterAttempt] Stack trace: {ex.StackTrace}");
+                AddLogToUI(new MonitoringLog(LogType.Error, "Lỗi khi đăng ký với server", ex.Message));
+            }
+        }
+
+        /// <summary>
+        /// Timer tick event to upload data to server periodically
+        /// </summary>
+        private async void DataUploadTimer_Tick(object? sender, EventArgs e)
+        {
+            try
+            {
+                Console.WriteLine($"[DataUploadTimer] Timer tick - IsConnected: {hubClient?.IsConnected}, AttemptId: {hubClient?.CurrentAttemptId}");
+                
+                if (hubClient?.CurrentAttemptId == null || !hubClient.IsConnected)
+                {
+                    Console.WriteLine("[DataUploadTimer] Skipping - Not connected or no attempt ID");
+                    _logger?.LogWarning("Skipping data upload - Not connected or no attempt ID");
+                    return; // Skip if not connected
+                }
+
+                var attemptId = hubClient.CurrentAttemptId.Value;
+                Console.WriteLine($"[DataUploadTimer] Starting data upload for attempt {attemptId}");
+
+                // Collect system telemetry
+                var telemetry = new
+                {
+                    timestamp = DateTime.UtcNow,
+                    systemInfo = processService.GetSystemResourceInfo(),
+                    processCount = processService.GetProcessCount(),
+                    isMonitoring = monitoringService.IsMonitoring
+                };
+
+                // Send telemetry
+                Console.WriteLine("[DataUploadTimer] Sending telemetry...");
+                await hubClient.SendTelemetryAsync(attemptId, telemetry);
+                Console.WriteLine("[DataUploadTimer] Telemetry sent successfully");
+
+                // Get current processes
+                var processes = GetCurrentProcesses();
+                Console.WriteLine($"[DataUploadTimer] Got {processes.Count} current processes");
+                
+                if (processes.Count > 0)
+                {
+                    // Check for process changes (new, ended, or status changed)
+                    var changedProcesses = DetectProcessChanges(processes);
+                    Console.WriteLine($"[DataUploadTimer] Detected {changedProcesses.Count} changed processes");
+                    
+                    // If there are changes, send immediately
+                    if (changedProcesses.Count > 0)
+                    {
+                        Console.WriteLine($"[DataUploadTimer] Sending {changedProcesses.Count} changed processes immediately...");
+                        await hubClient.SendProcessListAsync(attemptId, changedProcesses);
+                        Console.WriteLine($"[DataUploadTimer] Changed processes sent successfully");
+                        _logger?.LogInformation($"Sent {changedProcesses.Count} changed processes immediately");
+                    }
+                    
+                    // Also send full list periodically (every 30s via timer)
+                    Console.WriteLine($"[DataUploadTimer] Sending full process list ({processes.Count} processes)...");
+                    await hubClient.SendProcessListAsync(attemptId, processes);
+                    Console.WriteLine("[DataUploadTimer] Full process list sent successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DataUploadTimer] ERROR: {ex.Message}");
+                Console.WriteLine($"[DataUploadTimer] Stack trace: {ex.StackTrace}");
+                _logger?.LogError(ex, "Error in DataUploadTimer_Tick");
+            }
+        }
+
+        /// <summary>
+        /// Detect process changes (new processes, ended processes, status changes)
+        /// </summary>
+        private List<object> DetectProcessChanges(List<object> currentProcesses)
+        {
+            var changedProcesses = new List<object>();
+            var currentPids = new HashSet<int>();
+            var currentStatuses = new Dictionary<int, string>();
+
+            // Extract current process info
+            foreach (dynamic proc in currentProcesses)
+            {
+                int pid = proc.pid;
+                string status = proc.status ?? "Unknown";
+                currentPids.Add(pid);
+                currentStatuses[pid] = status;
+
+                // Check for new process
+                if (!previousProcessPids.Contains(pid))
+                {
+                    changedProcesses.Add(proc);
+                    _logger?.LogInformation($"New process detected: PID={pid}, Name={proc.name}");
+                }
+                // Check for status change
+                else if (previousProcessStatuses.TryGetValue(pid, out var prevStatus) && prevStatus != status)
+                {
+                    changedProcesses.Add(proc);
+                    _logger?.LogInformation($"Process status changed: PID={pid}, Name={proc.name}, {prevStatus} -> {status}");
+                }
+            }
+
+            // Check for ended processes
+            foreach (var prevPid in previousProcessPids)
+            {
+                if (!currentPids.Contains(prevPid))
+                {
+                    // Create a "stopped" entry for ended process
+                    var endedProcess = new
+                    {
+                        pid = prevPid,
+                        parentPid = (int?)null,
+                        name = "Unknown",
+                        description = "Process ended",
+                        memoryUsage = 0L,
+                        threadCount = 0,
+                        isSuspicious = false,
+                        windowTitle = "",
+                        filePath = "",
+                        status = "Stopped",
+                        startTime = DateTime.MinValue
+                    };
+                    changedProcesses.Add(endedProcess);
+                    _logger?.LogInformation($"Process ended: PID={prevPid}");
+                }
+            }
+
+            // Update tracking state
+            previousProcessPids = currentPids;
+            previousProcessStatuses = currentStatuses;
+
+            return changedProcesses;
+        }
+
+        /// <summary>
+        /// Get current running processes
+        /// </summary>
+        private List<object> GetCurrentProcesses()
+        {
+            try
+            {
+                var processes = processService.GetRunningProcesses();
+                var suspiciousProcesses = processService.GetSuspiciousProcesses();
+                var suspiciousNames = new HashSet<string>(suspiciousProcesses.Select(p => p.Name));
+
+                return processes.Select(p => new
+                {
+                    pid = p.Pid,
+                    parentPid = p.ParentPid, // Thêm parent process ID
+                    name = p.Name,
+                    description = p.Description ?? "",
+                    memoryUsage = p.MemoryUsage,
+                    threadCount = p.ThreadCount,
+                    isSuspicious = suspiciousNames.Contains(p.Name),
+                    windowTitle = p.WindowTitle ?? "",
+                    filePath = p.FilePath ?? "",
+                    status = p.Status.ToString(),
+                    startTime = p.StartTime // Thêm start time
+                } as object).ToList();
+            }
+            catch
+            {
+                return new List<object>();
+            }
+        }
+
+        private Microsoft.Extensions.Logging.ILogger<MonitoringForm>? _logger =>
+            LoggerProvider.CreateLogger<MonitoringForm>();
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            // Cleanup SignalR events before closing
+            CleanupSignalREvents();
+            
+            // Stop timers
+            if (dataUploadTimer != null)
+            {
+                dataUploadTimer.Stop();
+                dataUploadTimer.Dispose();
+            }
+            
             if (monitoringTimer != null)
             {
                 monitoringTimer.Stop();

@@ -18,6 +18,8 @@ namespace ComputerMonitoringClient.Dtos
 
         public int Pid { get; set; }
 
+        public int? ParentPid { get; set; } // Process ID của tiến trình cha
+
         public string Name { get; set; }
 
         public string Description { get; set; }

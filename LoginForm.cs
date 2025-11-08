@@ -1,27 +1,33 @@
 ﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Threading.Tasks;
 using AntdUI;
 using ComputerMonitoringClient.Services;
 using ComputerMonitoringClient.Utils;
+using ComputerMonitoringClient.Dtos;
 
 namespace ComputerMonitoringClient.Views
 {
     public partial class LoginForm : AntdUI.Window
     {
-        private AntdUI.Input txtExamCode;
-        private AntdUI.Input txtRoomCode;
-        private AntdUI.Button btnLogin;
-        private AntdUI.Label lblTitle;
-        private AntdUI.Label lblExamCode;
-        private AntdUI.Label lblRoomCode;
-        private AntdUI.Panel mainPanel;
+        private AntdUI.Input txtExamCode = null!;
+        private AntdUI.Input txtRoomCode = null!;
+        private AntdUI.Button btnLogin = null!;
+        private AntdUI.Label lblTitle = null!;
+        private AntdUI.Label lblExamCode = null!;
+        private AntdUI.Label lblRoomCode = null!;
+        private AntdUI.Panel mainPanel = null!;
 
         private readonly AuthenticationService authService;
+        private readonly ContestService contestService;
+        private readonly DeviceService deviceService;
 
         public LoginForm()
         {
             authService = AuthenticationService.Instance;
+            contestService = new ContestService();
+            deviceService = DeviceService.Instance;
             InitializeComponent();
         }
 
@@ -114,7 +120,7 @@ namespace ComputerMonitoringClient.Views
             mainPanel.Controls.Add(btnLogin);
         }
 
-        private void TxtRoomCode_KeyPress(object sender, KeyPressEventArgs e)
+        private void TxtRoomCode_KeyPress(object? sender, KeyPressEventArgs e)
         {
             if (e.KeyChar == (char)Keys.Enter)
             {
@@ -122,39 +128,200 @@ namespace ComputerMonitoringClient.Views
             }
         }
 
-        private void BtnLogin_Click(object sender, EventArgs e)
+        private async void BtnLogin_Click(object? sender, EventArgs e)
         {
             string examCode = txtExamCode.Text.Trim();
             string roomCode = txtRoomCode.Text.Trim();
 
-            // Sử dụng AuthenticationService để xác thực
-            string errorMessage;
-            bool loginSuccess = authService.Login(examCode, roomCode, out errorMessage);
-
-            if (!loginSuccess)
+            // Validate input
+            if (string.IsNullOrWhiteSpace(examCode))
             {
-                AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Thông báo", errorMessage)
+                AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Thông báo", Constants.Messages.ExamCodeRequired)
                 {
                     Icon = AntdUI.TType.Warn,
                     OkText = "Đóng"
                 });
-
-                if (string.IsNullOrWhiteSpace(examCode))
-                    txtExamCode.Focus();
-                else
-                    txtRoomCode.Focus();
+                txtExamCode.Focus();
                 return;
             }
 
-            // Đăng nhập thành công
-            AntdUI.Notification.success(this, "Thành công",
-                $"{Constants.Messages.LoginSuccess}\nMã dự thi: {examCode}\nPhòng thi: {roomCode}",
-                AntdUI.TAlignFrom.BR, Font);
+            if (string.IsNullOrWhiteSpace(roomCode))
+            {
+                AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Thông báo", Constants.Messages.RoomCodeRequired)
+                {
+                    Icon = AntdUI.TType.Warn,
+                    OkText = "Đóng"
+                });
+                txtRoomCode.Focus();
+                return;
+            }
 
-            this.Hide();
-            MonitoringForm monitoringForm = new MonitoringForm();
-            monitoringForm.FormClosed += (s, args) => this.Close();
-            monitoringForm.Show();
+            // Disable button to prevent double-click
+            btnLogin.Enabled = false;
+            btnLogin.Text = "Đang đăng nhập...";
+
+            try
+            {
+                // Get device information
+                var locationData = deviceService.GetDetailedLocationInfo();
+                var ipAddress = deviceService.GetPublicIP();
+
+                // Parse SBD from exam code (assuming it's numeric)
+                if (!int.TryParse(examCode, out int sbd))
+                {
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Lỗi", "Mã dự thi phải là số!")
+                    {
+                        Icon = AntdUI.TType.Error,
+                        OkText = "Đóng"
+                    });
+                    btnLogin.Enabled = true;
+                    btnLogin.Text = "Đăng nhập";
+                    txtExamCode.Focus();
+                    return;
+                }
+
+                // Create join room request
+                var joinRequest = new JoinRoomRequest
+                {
+                    accessCode = roomCode,
+                    sbd = sbd,
+                    ipAddress = ipAddress,
+                    location = locationData.GetFullLocationString()
+                };
+
+                // Call API to join contest room
+                var response = await contestService.JoinContestRoomAsync(joinRequest);
+
+                if (response == null)
+                {
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Lỗi", "Không nhận được phản hồi từ server!")
+                    {
+                        Icon = AntdUI.TType.Error,
+                        OkText = "Đóng"
+                    });
+                    btnLogin.Enabled = true;
+                    btnLogin.Text = "Đăng nhập";
+                    return;
+                }
+
+                // Check response status - handle 3 states: pending, rejected, approved
+                if (response.IsPending)
+                {
+                    // Pending - show pending form and wait for approval via SignalR
+                    AntdUI.Notification.info(this, "Chờ phê duyệt",
+                        "Yêu cầu của bạn đang chờ giám thị phê duyệt",
+                        AntdUI.TAlignFrom.BR, Font);
+
+                    this.Hide();
+                    PendingForm pendingForm = new PendingForm(response, roomCode);
+                    pendingForm.FormClosed += (s, args) => 
+                    {
+                        this.Show();
+                        btnLogin.Enabled = true;
+                        btnLogin.Text = "Đăng nhập";
+                    };
+                    pendingForm.Show();
+                    return;
+                }
+                else if (response.IsRejected)
+                {
+                    // Rejected - show error message
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Bị từ chối",
+                        $"Yêu cầu tham gia phòng thi của bạn đã bị từ chối!\n" +
+                        $"{(string.IsNullOrEmpty(response.message) ? "Vui lòng liên hệ giám thị để biết thêm chi tiết." : response.message)}")
+                    {
+                        Icon = AntdUI.TType.Error,
+                        OkText = "Đóng"
+                    });
+                    btnLogin.Enabled = true;
+                    btnLogin.Text = "Đăng nhập";
+                    return;
+                }
+                else if (response.IsApproved)
+                {
+                    // Approved - proceed to monitoring form
+                    string errorMessage;
+                    bool loginSuccess = authService.Login(examCode, roomCode, out errorMessage);
+
+                    if (loginSuccess)
+                    {
+                        // Connect to SignalR first before navigating to monitoring form
+                        try
+                        {
+                            var hubClient = MonitoringHubClient.Instance;
+                            await hubClient.ConnectAsync(response.token, response.attemptId);
+                            
+                            // Show success notification
+                            AntdUI.Notification.success(this, "Thành công",
+                                $"{Constants.Messages.LoginSuccess}\n" +
+                                $"Họ tên: {response.fullName}\n" +
+                                $"SBD: {response.sbd}\n" +
+                                $"Phòng thi: {roomCode}",
+                                AntdUI.TAlignFrom.BR, Font);
+
+                            // Navigate to monitoring form
+                            this.Hide();
+                            MonitoringForm monitoringForm = new MonitoringForm();
+                            monitoringForm.FormClosed += (s, args) => this.Close();
+                            monitoringForm.Show();
+                        }
+                        catch (Exception signalREx)
+                        {
+                            AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Cảnh báo kết nối",
+                                $"Đăng nhập thành công nhưng không thể kết nối SignalR!\n{signalREx.Message}\n\nBạn vẫn có thể tiếp tục nhưng sẽ không nhận được cập nhật real-time.")
+                            {
+                                Icon = AntdUI.TType.Warn,
+                                OkText = "Tiếp tục",
+                                OnOk = (config) =>
+                                {
+                                    // Navigate anyway even if SignalR fails
+                                    this.Hide();
+                                    MonitoringForm monitoringForm = new MonitoringForm();
+                                    monitoringForm.FormClosed += (s, args) => this.Close();
+                                    monitoringForm.Show();
+                                    return true;
+                                }
+                            });
+                            btnLogin.Enabled = true;
+                            btnLogin.Text = "Đăng nhập";
+                        }
+                    }
+                    else
+                    {
+                        AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Lỗi", errorMessage)
+                        {
+                            Icon = AntdUI.TType.Error,
+                            OkText = "Đóng"
+                        });
+                        btnLogin.Enabled = true;
+                        btnLogin.Text = "Đăng nhập";
+                    }
+                }
+                else
+                {
+                    // Unknown status - show error
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Lỗi",
+                        $"Trạng thái không xác định: {response.status}\n" +
+                        $"{(string.IsNullOrEmpty(response.message) ? "" : response.message)}")
+                    {
+                        Icon = AntdUI.TType.Error,
+                        OkText = "Đóng"
+                    });
+                    btnLogin.Enabled = true;
+                    btnLogin.Text = "Đăng nhập";
+                }
+            }
+            catch (Exception ex)
+            {
+                AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Lỗi", 
+                    $"Không thể kết nối đến server!\n{ex.Message}")
+                {
+                    Icon = AntdUI.TType.Error,
+                    OkText = "Đóng"
+                });
+                btnLogin.Enabled = true;
+                btnLogin.Text = "Đăng nhập";
+            }
         }
     }
 }

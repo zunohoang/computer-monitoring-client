@@ -10,6 +10,8 @@ namespace ComputerMonitoringClient.Networks
     public static class AppHttpSession
     {
         public static string? Token { get; set; }
+        public static string? CurrentToken { get; set; }
+        public static long? CurrentAttemptId { get; set; }
         public static User? CurrentUser { get; set; }
     }
 }

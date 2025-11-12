@@ -85,7 +85,7 @@ namespace ComputerMonitoringClient.Views
             // Status info
             lblStatus = new AntdUI.Label
             {
-                Text = $"Họ tên: {joinResponse.fullName}\nSBD: {joinResponse.sbd}\nPhòng thi: {accessCode}",
+                Text = $"Họ tên: {joinResponse.fullName}\nMã dự thi: {joinResponse.sbd}\nPhòng thi: {accessCode}",
                 Font = new Font("Segoe UI", 10),
                 ForeColor = Constants.Colors.TextSecondary,
                 Location = new Point(30, 260),

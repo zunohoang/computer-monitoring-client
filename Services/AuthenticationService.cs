@@ -8,8 +8,8 @@ namespace ComputerMonitoringClient.Services
     /// </summary>
     public class AuthenticationService
     {
-        private static AuthenticationService instance;
-        private ExamSession currentSession;
+        private static AuthenticationService? instance;
+        private ExamSession? currentSession;
 
         private AuthenticationService() { }
 
@@ -25,7 +25,7 @@ namespace ComputerMonitoringClient.Services
             }
         }
 
-        public ExamSession CurrentSession
+        public ExamSession? CurrentSession
         {
             get { return currentSession; }
         }
@@ -71,8 +71,8 @@ namespace ComputerMonitoringClient.Services
             if (currentSession != null)
             {
                 currentSession.IsActive = false;
-                currentSession = null;
             }
+            currentSession = null;
         }
 
         /// <summary>

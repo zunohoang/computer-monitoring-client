@@ -7,8 +7,8 @@ namespace ComputerMonitoringClient.Models
     /// </summary>
     public class ExamSession
     {
-        public string ExamCode { get; set; }
-        public string RoomCode { get; set; }
+        public string ExamCode { get; set; } = string.Empty;
+        public string RoomCode { get; set; } = string.Empty;
         public DateTime LoginTime { get; set; }
         public bool IsActive { get; set; }
 

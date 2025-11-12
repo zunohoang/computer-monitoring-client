@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ComputerMonitoringClient.Services.Auth
+namespace ComputerMonitoringClient.Services
 {
     public class AuthService
     {
@@ -21,7 +21,7 @@ namespace ComputerMonitoringClient.Services.Auth
         public async Task<LoginResponse?> LoginAsync(LoginRequest req)
         {
             _logger?.LogInformation("Attempting to log in user with email: {Email} - password: {Password}", req.email, req.password);
-            LoginResponse loginResponse = await ApiClient.Instance.PostAsync<LoginResponse>("Auth/login", req);
+            LoginResponse? loginResponse = await ApiClient.Instance.PostAsync<LoginResponse>("Auth/login", req);
 
             if (loginResponse?.success == true && !string.IsNullOrEmpty(loginResponse.token))
             {

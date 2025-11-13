@@ -4,7 +4,7 @@ namespace ComputerMonitoringClient.Configs
 {
     public static class ContestConfig
     {
-        public static readonly List<string> ProcessBlackList = new List<string>
+        public static List<string> ProcessBlackList = new List<string>
         {
             "discord",
             // "chrome",

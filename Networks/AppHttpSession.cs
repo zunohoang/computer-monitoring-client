@@ -14,7 +14,7 @@ namespace ComputerMonitoringClient.Networks
         public static long? CurrentAttemptId { get; set; }
         public static long? CurrentContestId { get; set; }
         public static long? CurrentUserId { get; set; }
-        public static long? CurrentRoomName { get; set; }
+        public static long? CurrentRoomId { get; set; }
         public static User? CurrentUser { get; set; }
     }
 }

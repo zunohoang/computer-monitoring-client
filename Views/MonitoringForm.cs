@@ -156,11 +156,11 @@ namespace ComputerMonitoringClient.Views
                     try
                     {
                         // Chỉ gửi danh sách tiến trình đã thay đổi (added + removed)  
-                        var changedProcesses = addedProcesses.Concat(removedProcesses).Take(5).ToList(); // TEST: CHỈ 5 PROCESS
+                        var changedProcesses = addedProcesses.Concat(removedProcesses).ToList(); // TEST: CHỈ 5 PROCESS
                         
                         if (changedProcesses.Count > 0)
                         {
-                            var processObjects = changedProcesses.Select(p => new ProcessChangeDto
+                            var processObjects = changedProcesses.Select(p => new ProcessChangeDto                                  
                             {
                                 Pid = p.Pid ?? 0,
                                 Name = p.Name ?? "unknown",

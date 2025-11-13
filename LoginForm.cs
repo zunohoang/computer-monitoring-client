@@ -5,6 +5,8 @@ using AntdUI;
 using ComputerMonitoringClient.Services;
 using ComputerMonitoringClient.Utils;
 using ComputerMonitoringClient.Dtos;
+using ComputerMonitoringClient.Networks;
+using ComputerMonitoringClient.Configs;
 
 namespace ComputerMonitoringClient.Views
 {
@@ -89,7 +91,7 @@ namespace ComputerMonitoringClient.Views
                 AppHttpSession.CurrentRoomId = response?.roomId;
                 AppHttpSession.Token = response?.token;
                 AppHttpSession.CurrentAttemptId = response?.attemptId;
-                AppHttpSession.CurrentToken = response?.CurrentToken;
+                AppHttpSession.CurrentToken = response?.token;
                 ContestConfig.ProcessBlackList = await configService.GetProcessBlackList();
 
                 if (response == null)

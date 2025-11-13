@@ -6,13 +6,14 @@ using ComputerMonitoringClient.Dtos;
 using ComputerMonitoringClient.Networks;
 using System.Threading.Tasks;
 
+
 namespace ComputerMonitoringClient.Services
 {
     public class ContestService
     {
         private readonly ILogger<ContestService> _logger;
 
-        public ContestService() 
+        public ContestService()
         {
             _logger = LoggerProvider.CreateLogger<ContestService>();
         }
@@ -26,14 +27,17 @@ namespace ComputerMonitoringClient.Services
         {
             try
             {
-                _logger?.LogInformation("Attempting to join contest room - SBD: {SBD}, AccessCode: {AccessCode}", 
+                DeviceDetailDto deviceDetails = await DeviceService.Instance.GetDeviceDetailAsync();
+                request.ipAddress = deviceDetails.IPAddress;
+                request.location = deviceDetails.Location;
+                _logger?.LogInformation("Attempting to join contest room - SBD: {SBD}, AccessCode: {AccessCode}",
                     request.sbd, request.accessCode);
 
                 var response = await ApiClient.Instance.PostAsync<JoinRoomResponse>("Room/join", request);
-                
+
                 if (response != null)
                 {
-                    _logger?.LogInformation("Successfully joined contest room - AttemptId: {AttemptId}, RoomId: {RoomId}, Status: {Status}", 
+                    _logger?.LogInformation("Successfully joined contest room - AttemptId: {AttemptId}, RoomId: {RoomId}, Status: {Status}",
                         response.attemptId, response.roomId, response.status);
                 }
                 else
@@ -45,7 +49,7 @@ namespace ComputerMonitoringClient.Services
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Error joining contest room - SBD: {SBD}, AccessCode: {AccessCode}", 
+                _logger?.LogError(ex, "Error joining contest room - SBD: {SBD}, AccessCode: {AccessCode}",
                     request.sbd, request.accessCode);
                 throw;
             }

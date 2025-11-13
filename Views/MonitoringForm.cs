@@ -14,6 +14,7 @@ namespace ComputerMonitoringClient.Views
         private readonly AuthenticationService authService;
         private readonly MonitoringHubClient hubClient;
         private readonly ProcessService processService;
+        private readonly ProcessBlockerService processBlocker;
 
         private AntdUI.Label lblHeader = null!;
         private AntdUI.Label lblStatus = null!;
@@ -26,8 +27,10 @@ namespace ComputerMonitoringClient.Views
             authService = AuthenticationService.Instance;
             hubClient = MonitoringHubClient.Instance;
             processService = new ProcessService();
+            processBlocker = new ProcessBlockerService(processService);
             InitializeComponent();
             SetupProcessMonitoring();
+            SetupProcessBlocker();
         }
 
         private void InitializeComponent()
@@ -184,11 +187,39 @@ namespace ComputerMonitoringClient.Views
             processService.StartMonitoring(2000); // Kiểm tra mỗi 2 giây
         }
 
+        private void SetupProcessBlocker()
+        {
+            // Đăng ký sự kiện khi tiến trình bị chặn
+            processBlocker.ProcessBlocked += (processName, pid) =>
+            {
+                // Thread-safe update UI
+                if (InvokeRequired)
+                {
+                    Invoke(new Action(() =>
+                    {
+                        var timestamp = DateTime.Now.ToString("HH:mm:ss");
+                        var blockMessage = $"[{timestamp}] 🚫 CHẶN: {processName} (PID: {pid})\n";
+                        txtProcessLog.Text = blockMessage + txtProcessLog.Text;
+                        
+                        // Giới hạn độ dài log (giữ 2000 ký tự cuối)
+                        if (txtProcessLog.Text.Length > 2000)
+                        {
+                            txtProcessLog.Text = txtProcessLog.Text.Substring(0, 2000);
+                        }
+                    }));
+                }
+            };
+
+            // Bắt đầu chặn tiến trình đen
+            processBlocker.StartBlocking();
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
             // Dừng giám sát khi đóng form
             processService.StopMonitoring();
+            processBlocker.StopBlocking();
         }
 
         private void BtnLogout_Click(object? sender, EventArgs e)

@@ -37,10 +37,10 @@ namespace ComputerMonitoringClient.Networks
 
         private void AttachToken()
         {
-            if (!string.IsNullOrEmpty(AppHttpSession.Token))
+            if (!string.IsNullOrEmpty(AppHttpSession.CurrentToken))
             {
                 _client.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", AppHttpSession.Token);
+                    new AuthenticationHeaderValue("Bearer", AppHttpSession.CurrentToken);
             }
             //else if (Properties.Settings.Default.AuthToken != "")
             //{

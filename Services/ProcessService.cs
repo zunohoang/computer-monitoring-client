@@ -76,7 +76,6 @@ namespace ComputerMonitoringClient.Services
                 }
                 catch
                 {
-                    // Có thể process vừa thoát => bỏ qua
                 }
             }
 
@@ -90,39 +89,34 @@ namespace ComputerMonitoringClient.Services
         {
             while (!token.IsCancellationRequested)
             {
-                
+
                 try
                 {
                     var processDtos = GetProcessDtos();
                     var currentProcessMap = processDtos
                         .Where(p => p.Pid.HasValue)
                         .ToDictionary(p => p.Pid!.Value, p => p);
-                    
+
                     var currentIds = currentProcessMap.Keys.ToHashSet();
 
                     if (!currentIds.SetEquals(_lastProcessIds))
                     {
-                        // Tìm tiến trình mới được mở (có trong current nhưng không có trong last)
                         var addedIds = currentIds.Except(_lastProcessIds).ToList();
                         var addedProcesses = addedIds
                             .Select(id => currentProcessMap[id])
                             .ToList();
 
-                        // Tìm tiến trình đã đóng (có trong last nhưng không có trong current)
                         var removedIds = _lastProcessIds.Except(currentIds).ToList();
                         var removedProcesses = removedIds
                             .Where(id => _lastProcessMap.ContainsKey(id))
                             .Select(id => _lastProcessMap[id])
                             .ToList();
 
-                        // Cập nhật state
                         _lastProcessIds = currentIds;
                         _lastProcessMap = currentProcessMap;
 
-                        // Phát sự kiện với danh sách đầy đủ (để backward compatibility)
                         ProcessesChanged?.Invoke(processDtos);
-                        
-                        // Phát sự kiện chi tiết với danh sách thay đổi
+
                         ProcessesChangedDetailed?.Invoke(addedProcesses, removedProcesses);
                     }
 
@@ -130,7 +124,6 @@ namespace ComputerMonitoringClient.Services
                 }
                 catch (TaskCanceledException)
                 {
-                    // Task bị hủy, thoát nhẹ nhàng
                     break;
                 }
                 catch (Exception ex)

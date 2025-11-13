@@ -35,6 +35,7 @@ namespace ComputerMonitoringClient.Services
 
             await DisconnectAsync();
 
+            AppHttpSession.Token = token;
             AppHttpSession.CurrentToken = token;
             AppHttpSession.CurrentAttemptId = attemptId;
 

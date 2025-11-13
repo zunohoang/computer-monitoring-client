@@ -12,10 +12,12 @@ namespace ComputerMonitoringClient.Views
     {
         private readonly AuthenticationService authService;
         private readonly ContestService contestService;
+        private readonly ConfigService configService;
 
         public LoginForm()
         {
             authService = AuthenticationService.Instance;
+            configService = ConfigService.Instance;
             contestService = new ContestService();
             InitializeComponent();
         }
@@ -82,6 +84,13 @@ namespace ComputerMonitoringClient.Views
                 };
 
                 var response = await contestService.JoinContestRoomAsync(joinRequest);
+                AppHttpSession.CurrentContestId = response?.contestId;
+                AppHttpSession.CurrentUserId = response?.sbd;
+                AppHttpSession.CurrentRoomId = response?.roomId;
+                AppHttpSession.Token = response?.token;
+                AppHttpSession.CurrentAttemptId = response?.attemptId;
+                AppHttpSession.CurrentToken = response?.CurrentToken;
+                ContestConfig.ProcessBlackList = await configService.GetProcessBlackList();
 
                 if (response == null)
                 {

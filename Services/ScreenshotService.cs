@@ -156,7 +156,7 @@ namespace ComputerMonitoringClient.Services
                 var baseUrl = Environment.GetEnvironmentVariable("MoniTest_BACKEND_URL") ?? "http://localhost:5045";
                 if (baseUrl.EndsWith("/")) baseUrl = baseUrl.TrimEnd('/');
 
-                var url = $"{baseUrl}/api/Upload/attempt/{attemptId}";
+                var url = $"{baseUrl}/Upload/attempt/{attemptId}";
                 var token = AppHttpSession.Token;
 
                 // Gửi request

@@ -217,6 +217,10 @@ namespace ComputerMonitoringClient.Views
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
+            
+            // Shutdown RemoteControlService
+            RemoteControlService.Instance.Shutdown();
+            
             // Dừng giám sát khi đóng form
             processService.StopMonitoring();
             processBlocker.StopBlocking();

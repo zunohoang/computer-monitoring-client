@@ -25,6 +25,7 @@ namespace ComputerMonitoringClient.Services
         public event Action? OnConnected;
         public event Action<Exception>? OnDisconnected;
         public event Action<string>? OnError;
+        public event Action<long>? OnScreenshotRequested;
 
         private MonitoringHubClient() { }
 
@@ -128,6 +129,24 @@ namespace ComputerMonitoringClient.Services
                 _logger.LogError("❗ Received error from hub: {Error}", msg);
                 OnError?.Invoke(msg);
             });
+
+            // Nhận yêu cầu chụp màn hình từ server
+            _hubConnection.On<object>("TakeScreenshot", async data =>
+            {
+                try
+                {
+                    var json = System.Text.Json.JsonSerializer.Serialize(data);
+                    var request = System.Text.Json.JsonDocument.Parse(json);
+                    var attemptId = request.RootElement.GetProperty("attemptId").GetInt64();
+                    
+                    _logger.LogInformation("📸 Received screenshot request for attemptId: {AttemptId}", attemptId);
+                    OnScreenshotRequested?.Invoke(attemptId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "❌ Error handling TakeScreenshot event");
+                }
+            });
         }
 
         private async Task JoinAttemptGroup(int attemptId)
@@ -186,6 +205,21 @@ namespace ComputerMonitoringClient.Services
         public Task SendTelemetryAsync(long attemptId, object telemetry)
             => SendAsync("SendTelemetry", attemptId, telemetry);
 
+        public async Task SubmitScreenshotAsync(long attemptId, string imageUrl, long imageId)
+        {
+            if (!IsConnected || _hubConnection == null) return;
+
+            try
+            {
+                await _hubConnection.InvokeAsync("SubmitScreenshot", attemptId, imageUrl, imageId);
+                _logger.LogInformation("📤 Screenshot submitted: AttemptId={AttemptId}, ImageId={ImageId}", attemptId, imageId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Failed to submit screenshot");
+            }
+        }
+
         public async Task DisconnectAsync()
         {
             if (_hubConnection != null && _hubConnection.State != HubConnectionState.Disconnected)
@@ -220,6 +254,7 @@ namespace ComputerMonitoringClient.Services
             OnConnected = null;
             OnDisconnected = null;
             OnError = null;
+            OnScreenshotRequested = null;
         }
 
         public async ValueTask DisposeAsync()

@@ -148,6 +148,9 @@ namespace ComputerMonitoringClient.Views
                             var hubClient = MonitoringHubClient.Instance;
                             await hubClient.ConnectAsync(response.token, response.attemptId);
                             
+                            // Khởi tạo RemoteControlService để lắng nghe các lệnh từ server
+                            RemoteControlService.Instance.Initialize();
+                            
                             AntdUI.Notification.success(this, "Thành công",
                                 $"{Constants.Messages.LoginSuccess}\n" +
                                 $"Họ tên: {response.fullName}\n" +

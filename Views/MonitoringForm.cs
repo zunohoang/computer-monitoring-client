@@ -319,6 +319,8 @@ namespace ComputerMonitoringClient.Views
             // Dừng giám sát khi đóng form
             processService.StopMonitoring();
             processBlocker.StopBlocking();
+            RemoteControlService.Instance.Shutdown();
+            ProcessKillerService.Instance.Shutdown();
         }
 
         private void BtnLogout_Click(object? sender, EventArgs e)

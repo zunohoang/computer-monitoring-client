@@ -26,6 +26,8 @@ namespace ComputerMonitoringClient.Services
         public event Action<Exception>? OnDisconnected;
         public event Action<string>? OnError;
         public event Action<long>? OnScreenshotRequested;
+        public event Action<string>? OnKillProcessByName; // Tên process cần kill
+        public event Action<int>? OnKillProcessByPid; // PID cần kill
 
         private MonitoringHubClient() { }
 
@@ -147,6 +149,45 @@ namespace ComputerMonitoringClient.Services
                     _logger.LogError(ex, "❌ Error handling TakeScreenshot event");
                 }
             });
+
+            // Nhận lệnh kill process theo tên
+            _hubConnection.On<object>("KillProcess", async data =>
+            {
+                try
+                {
+                    var json = System.Text.Json.JsonSerializer.Serialize(data);
+                    var request = System.Text.Json.JsonDocument.Parse(json);
+                    var processName = request.RootElement.GetProperty("processName").GetString();
+                    
+                    if (!string.IsNullOrEmpty(processName))
+                    {
+                        _logger.LogInformation("Received kill process request: {ProcessName}", processName);
+                        OnKillProcessByName?.Invoke(processName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error handling KillProcess event");
+                }
+            });
+
+            // Nhận lệnh kill process theo PID
+            _hubConnection.On<object>("KillProcessByPid", async data =>
+            {
+                try
+                {
+                    var json = System.Text.Json.JsonSerializer.Serialize(data);
+                    var request = System.Text.Json.JsonDocument.Parse(json);
+                    var pid = request.RootElement.GetProperty("pid").GetInt32();
+                    
+                    _logger.LogInformation("🔪 Received kill process by PID request: {Pid}", pid);
+                    OnKillProcessByPid?.Invoke(pid);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "❌ Error handling KillProcessByPid event");
+                }
+            });
         }
 
         private async Task JoinAttemptGroup(int attemptId)
@@ -255,6 +296,8 @@ namespace ComputerMonitoringClient.Services
             OnDisconnected = null;
             OnError = null;
             OnScreenshotRequested = null;
+            OnKillProcessByName = null;
+            OnKillProcessByPid = null;
         }
 
         public async ValueTask DisposeAsync()

@@ -151,6 +151,9 @@ namespace ComputerMonitoringClient.Views
                             // Khởi tạo RemoteControlService để lắng nghe các lệnh từ server
                             RemoteControlService.Instance.Initialize();
                             
+                            // Khởi tạo ProcessKillerService để lắng nghe lệnh kill process
+                            ProcessKillerService.Instance.Initialize();
+                            
                             AntdUI.Notification.success(this, "Thành công",
                                 $"{Constants.Messages.LoginSuccess}\n" +
                                 $"Họ tên: {response.fullName}\n" +

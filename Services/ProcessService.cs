@@ -151,5 +151,78 @@ namespace ComputerMonitoringClient.Services
                 return null;
             }
         }
+
+        /// <summary>
+        /// Kill tiến trình theo tên (kill tất cả processes có tên này)
+        /// </summary>
+        public int KillProcessByName(string processName)
+        {
+            if (string.IsNullOrWhiteSpace(processName))
+            {
+                Debug.WriteLine("[ProcessService] Process name is empty");
+                return 0;
+            }
+
+            try
+            {
+                var processes = Process.GetProcessesByName(processName);
+                var killedCount = 0;
+
+                foreach (var process in processes)
+                {
+                    try
+                    {
+                        Debug.WriteLine($"[ProcessService] Killing process: {process.ProcessName} (PID: {process.Id})");
+                        process.Kill();
+                        process.WaitForExit(3000); // Đợi tối đa 3 giây
+                        killedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[ProcessService] Failed to kill PID {process.Id}: {ex.Message}");
+                    }
+                }
+
+                Debug.WriteLine($"[ProcessService] Killed {killedCount} instances of '{processName}'");
+                return killedCount;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ProcessService] Error killing process '{processName}': {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Kill tiến trình theo PID
+        /// </summary>
+        public bool KillProcessByPid(int pid)
+        {
+            if (pid <= 0)
+            {
+                Debug.WriteLine("[ProcessService] Invalid PID");
+                return false;
+            }
+
+            try
+            {
+                var process = Process.GetProcessById(pid);
+                Debug.WriteLine($"[ProcessService] Killing process: {process.ProcessName} (PID: {pid})");
+                process.Kill();
+                process.WaitForExit(3000);
+                Debug.WriteLine($"[ProcessService] Successfully killed PID {pid}");
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                Debug.WriteLine($"[ProcessService] Process with PID {pid} not found");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ProcessService] Error killing PID {pid}: {ex.Message}");
+                return false;
+            }
+        }
     }
 }

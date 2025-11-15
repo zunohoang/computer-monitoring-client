@@ -24,7 +24,7 @@ namespace ComputerMonitoringClient.Services
             try
             {
                 var response = await ApiClient.Instance.GetAsync<List<string>>(
-                    $"Contest/{AppHttpSession.CurrentContestId ?? 0}/process-blacklist"
+                    $"ProcessBlacklist/contest/{AppHttpSession.CurrentContestId ?? 0}/string-names"
                 );                
                 return response ?? new List<string>();
             }

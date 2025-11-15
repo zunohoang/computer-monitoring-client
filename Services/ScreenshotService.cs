@@ -153,7 +153,7 @@ namespace ComputerMonitoringClient.Services
                 content.Add(new StringContent($"{{\"type\":\"screenshot\",\"timestamp\":\"{DateTime.UtcNow:O}\"}}"), "meta");
 
                 // Lấy base URL và token
-                var baseUrl = Environment.GetEnvironmentVariable("MoniTest_BACKEND_URL") ?? "http://localhost:5045";
+                var baseUrl = Environment.GetEnvironmentVariable("MoniTest_BACKEND_URL") ?? "http://localhost:5045/api";
                 if (baseUrl.EndsWith("/")) baseUrl = baseUrl.TrimEnd('/');
 
                 var url = $"{baseUrl}/Upload/attempt/{attemptId}";

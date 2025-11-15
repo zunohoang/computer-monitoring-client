@@ -18,6 +18,11 @@ namespace ComputerMonitoringClient.Views
 
         private AntdUI.Label lblHeader = null!;
         private AntdUI.Label lblStatus = null!;
+        private AntdUI.Panel infoPanel = null!;
+        private AntdUI.Label lblContestInfo = null!;
+        private AntdUI.Label lblUserInfo = null!;
+        private AntdUI.Label lblRoomInfo = null!;
+        private AntdUI.Label lblAttemptInfo = null!;
         private AntdUI.Button btnLogout = null!;
         private AntdUI.Panel contentPanel = null!;
         private AntdUI.Input txtProcessLog = null!;
@@ -29,6 +34,7 @@ namespace ComputerMonitoringClient.Views
             processService = new ProcessService();
             processBlocker = new ProcessBlockerService(processService);
             InitializeComponent();
+            LoadSessionInfo();
             SetupProcessMonitoring();
             SetupProcessBlocker();
         }
@@ -36,7 +42,7 @@ namespace ComputerMonitoringClient.Views
         private void InitializeComponent()
         {
             this.Text = "Hệ thống giám sát thi";
-            this.Size = new System.Drawing.Size(800, 600);
+            this.Size = new System.Drawing.Size(900, 700);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Constants.Colors.Background;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -46,7 +52,7 @@ namespace ComputerMonitoringClient.Views
             contentPanel = new AntdUI.Panel
             {
                 Location = new System.Drawing.Point(20, 20),
-                Size = new System.Drawing.Size(760, 540),
+                Size = new System.Drawing.Size(860, 640),
                 Back = Constants.Colors.White,
                 Shadow = Constants.UI.DefaultShadow,
                 Radius = Constants.UI.DefaultRadius
@@ -60,7 +66,7 @@ namespace ComputerMonitoringClient.Views
                 Font = new System.Drawing.Font("Segoe UI", 18, System.Drawing.FontStyle.Bold),
                 ForeColor = Constants.Colors.Primary,
                 Location = new System.Drawing.Point(20, 20),
-                Size = new System.Drawing.Size(720, 40),
+                Size = new System.Drawing.Size(820, 40),
                 TextAlign = System.Drawing.ContentAlignment.MiddleCenter
             };
             contentPanel.Controls.Add(lblHeader);
@@ -71,17 +77,91 @@ namespace ComputerMonitoringClient.Views
                 Text = "✓ Hệ thống đang hoạt động",
                 Font = new System.Drawing.Font("Segoe UI", 14),
                 ForeColor = Constants.Colors.Success,
-                Location = new System.Drawing.Point(20, 80),
-                Size = new System.Drawing.Size(720, 40),
+                Location = new System.Drawing.Point(20, 70),
+                Size = new System.Drawing.Size(820, 30),
                 TextAlign = System.Drawing.ContentAlignment.MiddleCenter
             };
             contentPanel.Controls.Add(lblStatus);
 
+            // Info Panel - Session Information
+            infoPanel = new AntdUI.Panel
+            {
+                Location = new System.Drawing.Point(20, 110),
+                Size = new System.Drawing.Size(820, 120),
+                Back = System.Drawing.Color.FromArgb(245, 248, 255),
+                Radius = 8,
+                BorderWidth = 1f,
+            };
+            contentPanel.Controls.Add(infoPanel);
+
+            lblContestInfo = new AntdUI.Label
+            {
+                Text = "🏆 Contest ID: --",
+                Font = new System.Drawing.Font("Segoe UI", 11, System.Drawing.FontStyle.Bold),
+                Location = new System.Drawing.Point(20, 15),
+                Size = new System.Drawing.Size(380, 25),
+                ForeColor = Constants.Colors.TextPrimary
+            };
+            infoPanel.Controls.Add(lblContestInfo);
+
+            lblUserInfo = new AntdUI.Label
+            {
+                Text = "👤 SBD: --",
+                Font = new System.Drawing.Font("Segoe UI", 11),
+                Location = new System.Drawing.Point(420, 15),
+                Size = new System.Drawing.Size(380, 25),
+                ForeColor = Constants.Colors.TextPrimary
+            };
+            infoPanel.Controls.Add(lblUserInfo);
+
+            lblRoomInfo = new AntdUI.Label
+            {
+                Text = "🚪 Room ID: --",
+                Font = new System.Drawing.Font("Segoe UI", 11),
+                Location = new System.Drawing.Point(20, 50),
+                Size = new System.Drawing.Size(380, 25),
+                ForeColor = Constants.Colors.TextPrimary
+            };
+            infoPanel.Controls.Add(lblRoomInfo);
+
+            lblAttemptInfo = new AntdUI.Label
+            {
+                Text = "📝 Attempt ID: --",
+                Font = new System.Drawing.Font("Segoe UI", 11),
+                Location = new System.Drawing.Point(420, 50),
+                Size = new System.Drawing.Size(380, 25),
+                ForeColor = Constants.Colors.TextPrimary
+            };
+            infoPanel.Controls.Add(lblAttemptInfo);
+
+            var lblConnection = new AntdUI.Label
+            {
+                Text = "🔌 SignalR: Đang kết nối...",
+                Font = new System.Drawing.Font("Segoe UI", 10),
+                Location = new System.Drawing.Point(20, 85),
+                Size = new System.Drawing.Size(780, 25),
+                ForeColor = Constants.Colors.TextSecondary
+            };
+            infoPanel.Controls.Add(lblConnection);
+
+            // Update connection status
+            var timer = new System.Windows.Forms.Timer { Interval = 2000 };
+            timer.Tick += (s, e) => 
+            {
+                lblConnection.Text = hubClient.IsConnected 
+                    ? "🔌 SignalR: ✅ Đã kết nối" 
+                    : "🔌 SignalR: ❌ Mất kết nối";
+                lblConnection.ForeColor = hubClient.IsConnected 
+                    ? Constants.Colors.Success 
+                    : Constants.Colors.Error;
+            };
+            timer.Start();
+
             // Process Log
             txtProcessLog = new AntdUI.Input
             {
-                Location = new System.Drawing.Point(20, 140),
-                Size = new System.Drawing.Size(720, 300),
+                Location = new System.Drawing.Point(20, 240),
+                Size = new System.Drawing.Size(820, 300),
                 Multiline = true,
                 ReadOnly = true,
                 Font = new System.Drawing.Font("Consolas", 9),
@@ -93,7 +173,7 @@ namespace ComputerMonitoringClient.Views
             btnLogout = new AntdUI.Button
             {
                 Text = "Đăng xuất",
-                Location = new System.Drawing.Point(290, 460),
+                Location = new System.Drawing.Point(340, 560),
                 Size = new System.Drawing.Size(180, 50),
                 Font = new System.Drawing.Font("Segoe UI", 12, System.Drawing.FontStyle.Bold),
                 Type = AntdUI.TTypeMini.Error,
@@ -102,6 +182,21 @@ namespace ComputerMonitoringClient.Views
             };
             btnLogout.Click += BtnLogout_Click;
             contentPanel.Controls.Add(btnLogout);
+        }
+
+        private void LoadSessionInfo()
+        {
+            try
+            {
+                lblContestInfo.Text = $"🏆 Contest ID: {AppHttpSession.CurrentContestId ?? 0}";
+                lblUserInfo.Text = $"👤 SBD: {AppHttpSession.CurrentUserId ?? 0}";
+                lblRoomInfo.Text = $"🚪 Room ID: {AppHttpSession.CurrentRoomId ?? 0}";
+                lblAttemptInfo.Text = $"📝 Attempt ID: {AppHttpSession.CurrentAttemptId ?? 0}";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading session info: {ex.Message}");
+            }
         }
 
         private void SetupProcessMonitoring()
